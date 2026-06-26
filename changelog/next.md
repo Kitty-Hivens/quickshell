@@ -6,3 +6,4 @@
 - Fixed `WlSessionLock.locked` changes not being emitted on unlock.
 - Fixed a crash when unplugging a screen being captured by ScreencopyView or trying to capture the fallback screen.
 - Fixed most broken qml types in qmlls/qmllint for Qt 6.12.
+- Fixed the polkit agent failing to register when running outside a session cgroup, such as a systemd user service, by resolving the session from XDG_SESSION_ID.
