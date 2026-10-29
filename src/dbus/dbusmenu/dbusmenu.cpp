@@ -101,13 +101,24 @@ ObjectModel<QsMenuEntry>* DBusMenuItem::children() {
 	return reinterpret_cast<ObjectModel<QsMenuEntry>*>(&this->enabledChildren);
 }
 
-void DBusMenuItem::updateProperties(const QVariantMap& properties, const QStringList& removed) {
+void DBusMenuItem::updateProperties(
+    const QVariantMap& properties,
+    const QStringList& removed,
+    bool partial
+) {
 	// Some programs appear to think sending an empty map does not mean "reset everything"
 	// and instead means "do nothing". oh well...
 	if (properties.isEmpty() && removed.isEmpty()) {
 		qCDebug(logDbusMenu) << "Ignoring empty property update for" << this;
 		return;
 	}
+
+	// A full set of properties, as a layout carries, resets every property it leaves out.
+	// ItemsPropertiesUpdated carries only those that changed, and resets only the ones it
+	// names as removed.
+	auto resets = [&](const char* name) {
+		return removed.contains(name) || (!partial && removed.isEmpty());
+	};
 
 	auto originalText = this->mText;
 	//auto originalMnemonic = this->mnemonic;
@@ -144,7 +155,7 @@ void DBusMenuItem::updateProperties(const QVariantMap& properties, const QString
 				this->mCleanLabel.remove(i, 1);
 			}
 		}
-	} else if (removed.isEmpty() || removed.contains("label")) {
+	} else if (resets("label")) {
 		this->mText = "";
 		//this->mnemonic = QChar();
 	}
@@ -152,21 +163,21 @@ void DBusMenuItem::updateProperties(const QVariantMap& properties, const QString
 	auto enabled = properties.value("enabled");
 	if (enabled.canConvert<bool>()) {
 		this->mEnabled = enabled.value<bool>();
-	} else if (removed.isEmpty() || removed.contains("enabled")) {
+	} else if (resets("enabled")) {
 		this->mEnabled = true;
 	}
 
 	auto visible = properties.value("visible");
 	if (visible.canConvert<bool>()) {
 		this->visible = visible.value<bool>();
-	} else if (removed.isEmpty() || removed.contains("visible")) {
+	} else if (resets("visible")) {
 		this->visible = true;
 	}
 
 	auto iconName = properties.value("icon-name");
 	if (iconName.canConvert<QString>()) {
 		this->iconName = iconName.value<QString>();
-	} else if (removed.isEmpty() || removed.contains("icon-name")) {
+	} else if (resets("icon-name")) {
 		this->iconName = "";
 	}
 
@@ -181,7 +192,7 @@ void DBusMenuItem::updateProperties(const QVariantMap& properties, const QString
 			this->image.data = data;
 			this->image.imageChanged();
 		}
-	} else if (removed.isEmpty() || removed.contains("icon-data")) {
+	} else if (resets("icon-data")) {
 		imageChanged = this->image.hasData();
 		this->image.data.clear();
 	}
@@ -189,7 +200,7 @@ void DBusMenuItem::updateProperties(const QVariantMap& properties, const QString
 	auto type = properties.value("type");
 	if (type.canConvert<QString>()) {
 		this->mSeparator = type.value<QString>() == "separator";
-	} else if (removed.isEmpty() || removed.contains("type")) {
+	} else if (resets("type")) {
 		this->mSeparator = false;
 	}
 
@@ -204,7 +215,7 @@ void DBusMenuItem::updateProperties(const QVariantMap& properties, const QString
 			qCWarning(logDbusMenu) << "Unrecognized toggle type" << toggleTypeStr << "for" << this;
 			this->mButtonType = QsMenuButtonType::None;
 		}
-	} else if (removed.isEmpty() || removed.contains("toggle-type")) {
+	} else if (resets("toggle-type")) {
 		this->mButtonType = QsMenuButtonType::None;
 	}
 
@@ -215,7 +226,7 @@ void DBusMenuItem::updateProperties(const QVariantMap& properties, const QString
 		if (toggleStateInt == 0) this->mCheckState = Qt::Unchecked;
 		else if (toggleStateInt == 1) this->mCheckState = Qt::Checked;
 		else this->mCheckState = Qt::PartiallyChecked;
-	} else if (removed.isEmpty() || removed.contains("toggle-state")) {
+	} else if (resets("toggle-state")) {
 		this->mCheckState = Qt::Unchecked;
 	}
 
@@ -230,7 +241,7 @@ void DBusMenuItem::updateProperties(const QVariantMap& properties, const QString
 			                       << this;
 			this->displayChildren = false;
 		}
-	} else if (removed.isEmpty() || removed.contains("children-display")) {
+	} else if (resets("children-display")) {
 		this->displayChildren = false;
 	}
 
@@ -471,14 +482,14 @@ void DBusMenu::onItemPropertiesUpdated( // NOLINT
 	for (const auto& propset: updatedProps) {
 		auto* item = this->items.value(propset.id);
 		if (item != nullptr) {
-			item->updateProperties(propset.properties);
+			item->updateProperties(propset.properties, {}, true);
 		}
 	}
 
 	for (const auto& propset: removedProps) {
 		auto* item = this->items.value(propset.id);
 		if (item != nullptr) {
-			item->updateProperties({}, propset.properties);
+			item->updateProperties({}, propset.properties, true);
 		}
 	}
 }

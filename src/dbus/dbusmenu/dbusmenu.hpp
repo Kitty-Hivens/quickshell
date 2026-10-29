@@ -78,7 +78,12 @@ public:
 
 	[[nodiscard]] ObjectModel<QsMenuEntry>* children() override;
 
-	void updateProperties(const QVariantMap& properties, const QStringList& removed = {});
+	// partial: the map holds only the properties that changed, not every one the item has.
+	void updateProperties(
+	    const QVariantMap& properties,
+	    const QStringList& removed = {},
+	    bool partial = false
+	);
 	void onChildrenUpdated();
 
 	qint32 id = 0;
