@@ -2,6 +2,9 @@
 #include <csignal> // NOLINT
 #include <utility>
 
+#include <sys/prctl.h>
+#include <unistd.h>
+
 #include <qdir.h>
 #include <qhash.h>
 #include <qlist.h>
@@ -211,6 +214,18 @@ void Process::startProcessIfReady() {
 	if (this->mStdoutParser == nullptr) this->process->closeReadChannel(QProcess::StandardOutput);
 	if (this->mStderrParser == nullptr) this->process->closeReadChannel(QProcess::StandardError);
 	if (!this->mStdinEnabled) this->process->closeWriteChannel();
+
+	// The child goes with the shell. The destructor stops it on a clean exit, but a
+	// shell that crashes or is killed never runs it, and the child lived on, holding
+	// whatever it held, for as long as the session did. Asked for in the child, and
+	// checked there against a parent already gone before the request took hold. The
+	// signal follows the thread that started the child, here the main thread, which
+	// lasts as long as the shell.
+	auto parent = getpid();
+	this->process->setChildProcessModifier([parent] {
+		prctl(PR_SET_PDEATHSIG, SIGTERM);
+		if (getppid() != parent) _exit(1);
+	});
 
 	this->setupEnvironment(this->process);
 	this->process->start(cmd, args);
